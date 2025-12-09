@@ -29,6 +29,7 @@
         <!-- Debug information -->
         <div class="mt-4 text-sm text-gray-500">
             <p>Data points: <span id="dataCount">0</span></p>
+            <p class="text-red-400" id="errorMsg"></p>
         </div>
     </div>
 
@@ -87,18 +88,39 @@
             }
         });
 
-        // Load historical data (last 24 hours)
+        // Show error message
+        function showError(message) {
+            document.getElementById('errorMsg').textContent = message;
+            console.error(message);
+        }
+
+        // Load historical data with better error handling
         async function loadHistoricalData() {
             try {
                 console.log('Loading historical data...');
+                
                 const response = await fetch(
-                    'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1&interval=hourly'
+                    'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1&interval=hourly',
+                    {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }
                 );
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+                
                 const data = await response.json();
-                console.log('Historical data loaded');
+                console.log('Historical data loaded:', data);
+
+                if (!data.prices || data.prices.length === 0) {
+                    throw new Error('No price data received');
+                }
 
                 // Process historical price data
-                const prices = data.prices; // [[timestamp, price], ...]
+                const prices = data.prices;
                 
                 prices.forEach(([timestamp, price]) => {
                     const date = new Date(timestamp);
@@ -113,10 +135,14 @@
                 chart.update();
                 document.getElementById('dataCount').textContent = timeLabels.length;
                 
-                // After loading historical data, fetch current price
+                // Fetch current price
                 await fetchCurrentPrice();
             } catch (error) {
                 console.error('Error loading historical data:', error);
+                showError('Historical data load failed: ' + error.message);
+                
+                // If historical data fails, try to at least get current price
+                await fetchCurrentPrice();
             }
         }
 
@@ -125,24 +151,39 @@
             try {
                 console.log('Fetching current price...');
                 const response = await fetch(
-                    'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true'
+                    'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true',
+                    {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }
                 );
-                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
                 
+                const data = await response.json();
+                console.log('Current price data:', data);
+                
+                if (!data.ethereum) {
+                    throw new Error('No Ethereum data in response');
+                }
+
                 const price = data.ethereum.usd;
                 const change = data.ethereum.usd_24h_change;
 
-                // Refresh current market price
+                // Update current price
                 document.getElementById('currentPrice').textContent = 
                     '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 
-                // Refresh market change
+                // Update price change
                 const changeElement = document.getElementById('priceChange');
                 const changeText = change.toFixed(2) + '%';
                 changeElement.textContent = (change >= 0 ? '↑ +' : '↓ ') + changeText;
                 changeElement.className = change >= 0 ? 'text-green-500 text-lg' : 'text-red-500 text-lg';
 
-                // Refresh last update time
+                // Update last update time
                 const now = new Date();
                 document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('ja-JP');
 
@@ -162,18 +203,19 @@
 
                 document.getElementById('dataCount').textContent = timeLabels.length;
                 chart.update();
-                console.log('Chart refreshed');
+                console.log('Chart updated successfully');
             } catch (error) {
                 console.error('Error fetching price:', error);
+                showError('Price fetch failed: ' + error.message);
                 document.getElementById('currentPrice').textContent = 'Error';
             }
         }
 
-        // Initial load: Load historical data first
+        // Initial load
         loadHistoricalData();
 
-        // Update current price every 30 seconds
-        setInterval(fetchCurrentPrice, 30000);
+        // Update every 60 seconds (changed from 30 to avoid rate limits)
+        setInterval(fetchCurrentPrice, 60000);
 
         console.log('ETH chart initialized');
     </script>
