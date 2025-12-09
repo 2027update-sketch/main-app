@@ -50,7 +50,7 @@
                     borderWidth: 2,
                     tension: 0.4,
                     fill: true,
-                    pointRadius: 3,
+                    pointRadius: 2,
                     pointHoverRadius: 5
                 }]
             },
@@ -87,15 +87,47 @@
             }
         });
 
-        // Fetch ETH price from CoinGecko API
-        async function fetchETHPrice() {
+        // Load historical data (last 24 hours)
+        async function loadHistoricalData() {
             try {
-                console.log('Loading API...');
+                console.log('Loading historical data...');
+                const response = await fetch(
+                    'https://api.coingecko.com/api/v3/coins/ethereum/market_chart?vs_currency=usd&days=1&interval=hourly'
+                );
+                const data = await response.json();
+                console.log('Historical data loaded');
+
+                // Process historical price data
+                const prices = data.prices; // [[timestamp, price], ...]
+                
+                prices.forEach(([timestamp, price]) => {
+                    const date = new Date(timestamp);
+                    const timeStr = date.toLocaleTimeString('ja-JP', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                    timeLabels.push(timeStr);
+                    priceData.push(price);
+                });
+
+                chart.update();
+                document.getElementById('dataCount').textContent = timeLabels.length;
+                
+                // After loading historical data, fetch current price
+                await fetchCurrentPrice();
+            } catch (error) {
+                console.error('Error loading historical data:', error);
+            }
+        }
+
+        // Fetch current ETH price
+        async function fetchCurrentPrice() {
+            try {
+                console.log('Fetching current price...');
                 const response = await fetch(
                     'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true'
                 );
                 const data = await response.json();
-                console.log('Response Data:', data);
                 
                 const price = data.ethereum.usd;
                 const change = data.ethereum.usd_24h_change;
@@ -114,8 +146,11 @@
                 const now = new Date();
                 document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('ja-JP');
 
-                // Refresh chart data
-                const timeStr = now.toLocaleTimeString('ja-JP');
+                // Add new data point to chart
+                const timeStr = now.toLocaleTimeString('ja-JP', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
                 timeLabels.push(timeStr);
                 priceData.push(price);
 
@@ -125,9 +160,7 @@
                     priceData.shift();
                 }
 
-                // Display data point count
                 document.getElementById('dataCount').textContent = timeLabels.length;
-
                 chart.update();
                 console.log('Chart refreshed');
             } catch (error) {
@@ -136,11 +169,11 @@
             }
         }
 
-        // Initial execution
-        fetchETHPrice();
+        // Initial load: Load historical data first
+        loadHistoricalData();
 
-        // Update every 30 seconds
-        setInterval(fetchETHPrice, 30000);
+        // Update current price every 30 seconds
+        setInterval(fetchCurrentPrice, 30000);
 
         console.log('ETH chart initialized');
     </script>
